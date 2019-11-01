@@ -3,10 +3,29 @@
 // Objetivo: trabalho visa modelar um sistema de integração contínua.
 dtmc
 
-module die
+const double git_chance_turn_off_server = 1/27;
+const double continuous_chance_turn_off_server = 1/19;
 
-	// local state
-	s : [0..7] init 0;
+module hasInternet
+		
+	// A maquina possui conexão com a internet
+	hasInternetAccess : [0..1] init 0; 
 	
+	[] hasInternetAccess = 0 -> 0.01:(hasInternetAccess'=0) + 0.99:(hasInternetAccess'=1);		 // internet desligada
+	[] hasInternetAccess = 1 -> 0.99:(hasInternetAccess'=1) + 0.01:(hasInternetAccess'=0) ; 	 // internet ligada
 	
 endmodule
+
+module gitServerOnAir
+	
+	// Servidor do git está no ar
+	gitServerStatus: [0..2] init 0;
+		
+	[] gitServerStatus = 0 -> 1:(gitServerStatus'=1); 					 						 // servidor desligado
+	[] gitServerStatus = 1 -> 1:(gitServerStatus'= hasInternetAccess != 0 ? 2 : 1);								 // liga e verifica a internet 
+	[] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 // ligado com internet e chance de desligar
+
+endmodule
+	
+module continousServerOnAir = gitServerOnAir [gitServerStatus = continuousServerStatus, git_chance_turn_off_server = continuous_chance_turn_off_server] endmodule
+
