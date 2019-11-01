@@ -5,27 +5,62 @@ dtmc
 
 const double git_chance_turn_off_server = 1/27;
 const double continuous_chance_turn_off_server = 1/19;
+const double chance_already_update_code = 3/5;
 
 module hasInternet
 		
 	// A maquina possui conexão com a internet
 	hasInternetAccess : [0..1] init 0; 
 	
-	[] hasInternetAccess = 0 -> 0.01:(hasInternetAccess'=0) + 0.99:(hasInternetAccess'=1);		 // internet desligada
-	[] hasInternetAccess = 1 -> 0.99:(hasInternetAccess'=1) + 0.01:(hasInternetAccess'=0) ; 	 // internet ligada
+	// internet desligada
+	[] hasInternetAccess = 0 -> 0.01:(hasInternetAccess'=0) + 0.99:(hasInternetAccess'=1);		 
+	// internet ligada
+	[connected] hasInternetAccess = 1 -> 0.99:(hasInternetAccess'=1) + 0.01:(hasInternetAccess'=0) ; 	 
 	
 endmodule
+
+module developerComputerHasInternet = hasInternet [hasInternetAccess = computerHasInternetAccess] endmodule
 
 module gitServerOnAir
 	
-	// Servidor do git está no ar
+	// Servidor do git está no ar e tem internet
 	gitServerStatus: [0..2] init 0;
 		
-	[] gitServerStatus = 0 -> 1:(gitServerStatus'=1); 					 						 // servidor desligado
-	[] gitServerStatus = 1 -> 1:(gitServerStatus'= hasInternetAccess != 0 ? 2 : 1);								 // liga e verifica a internet 
-	[] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 // ligado com internet e chance de desligar
+	// servidor desligado
+	[connected] gitServerStatus = 0 -> 1:(gitServerStatus'=1); 		
+	// liga e verifica a internet 			 						 
+	[] gitServerStatus = 1 -> 1:(gitServerStatus'= hasInternetAccess != 0 ? 2 : 1);			
+	// ligado com internet e chance de desligar					 
+	[gitOnAir] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 
 
 endmodule
 	
-module continousServerOnAir = gitServerOnAir [gitServerStatus = continuousServerStatus, git_chance_turn_off_server = continuous_chance_turn_off_server] endmodule
+module continousServerOnAir = gitServerOnAir [gitServerStatus = continuousServerStatus, git_chance_turn_off_server = continuous_chance_turn_off_server,gitOnAir = continousOnAir] endmodule
 
+module updateCodeAndCommit
+
+	// Atualizar o código e commitar 
+	updateCodeAndCommit: [0..4] init 0;
+		
+	// 60% de chance do codigo estar atualizado e 40% de estar desatualizado. Se estiver, esta pronto pra commit (state 2)
+	[] updateCodeAndCommit = 0 -> 
+		chance_already_update_code:(updateCodeAndCommit'=2) + (1 - chance_already_update_code):(updateCodeAndCommit'=1);
+	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(quem tb checa se ele esta com internet)
+	[] updateCodeAndCommit = 1 -> 
+		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 2 : 1);
+	// Codigo atualizado (git pull)	, pronto para commit
+	[] updateCodeAndCommit = 2 -> 
+		1:(updateCodeAndCommit'= 3);
+	// Commitar as alteracoes no codigo. Se der no commit, tentar commitar novamente
+	[] updateCodeAndCommit = 3 -> 
+		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 4 : 3);
+	// Codigo comitado com sucesso
+	[] updateCodeAndCommit = 4 ->
+		1:(updateCodeAndCommit'=4);
+
+endmodule
+		
+		
+
+	
+	
