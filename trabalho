@@ -5,7 +5,8 @@ dtmc
 
 const double git_chance_turn_off_server = 1/27;
 const double continuous_chance_turn_off_server = 1/19;
-const double chance_already_update_code = 3/5;
+const double chance_already_update_code = 3/5; //Arrumar e tirar a chance do codigo estar desatualizado
+
 
 module hasInternet
 		
@@ -31,7 +32,7 @@ module gitServerOnAir
 	// liga e verifica a internet 			 						 
 	[] gitServerStatus = 1 -> 1:(gitServerStatus'= hasInternetAccess != 0 ? 2 : 1);			
 	// ligado com internet e chance de desligar					 
-	[gitOnAir] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 
+	[] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 
 
 endmodule
 	
@@ -40,25 +41,49 @@ module continousServerOnAir = gitServerOnAir [gitServerStatus = continuousServer
 module updateCodeAndCommit
 
 	// Atualizar o código e commitar 
-	updateCodeAndCommit: [0..4] init 0;
+	updateCodeAndCommit: [0..3] init 0;
 		
-	// 60% de chance do codigo estar atualizado e 40% de estar desatualizado. Se estiver, esta pronto pra commit (state 2)
+	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(que tb checa se ele esta com internet)
 	[] updateCodeAndCommit = 0 -> 
-		chance_already_update_code:(updateCodeAndCommit'=2) + (1 - chance_already_update_code):(updateCodeAndCommit'=1);
-	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(quem tb checa se ele esta com internet)
-	[] updateCodeAndCommit = 1 -> 
-		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 2 : 1);
+		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 1 : 0);
 	// Codigo atualizado (git pull)	, pronto para commit
-	[] updateCodeAndCommit = 2 -> 
-		1:(updateCodeAndCommit'= 3);
+	[] updateCodeAndCommit = 1 -> 
+		1:(updateCodeAndCommit'= 2);
 	// Commitar as alteracoes no codigo. Se der no commit, tentar commitar novamente
-	[] updateCodeAndCommit = 3 -> 
-		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 4 : 3);
+	[] updateCodeAndCommit = 2 -> 
+		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 3 : 2);
 	// Codigo comitado com sucesso
-	[] updateCodeAndCommit = 4 ->
-		1:(updateCodeAndCommit'=4);
+	[] updateCodeAndCommit = 3 ->
+		1:(updateCodeAndCommit'=3);
 
 endmodule
+
+module buildDeploy
+	
+	// ocupado
+	// pronto pra buildar
+	// buildando
+	// buildado 
+	buildStatusServer: [0..] init 0;
+	
+	// jah estah buildando algum sistema (OCUPADO)
+	[] buildStatusServer = 0 -> 0.985:(buildStatusServer'=1) + 0.015(buildStatusServer'=0);
+	// pronto pra build 
+	[] buildStatusServer = 1 -> 1:(buildStatusServer'=2);
+	// Chance de erro de buildar(erro sintático) e sucesso
+	[] buildStatusServer = 2 -> 0.925:(buildStatusServer'=2) + 0.075:(buildStatusServer'=3)
+	//buildado com sucesso
+	[] buildStatusServer = 3 -> 1:(buildStatusServer'= 4)
+	// 95 de chance de deployar com sucesso + 4.995 de chance de ter erro sintatico do codigo + 0.005 de chance de faltar espaco pra storage do compilado
+	[] buildStatusServer = 4 -> 0.045:(buildStatusServer'=4) + 0.005:(buildStatusServer'=4) + 0.95(buildStatusServer'=5);
+
+
+	
+endmodule 
+ 
+
+
+
 		
 		
 
