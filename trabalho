@@ -5,6 +5,9 @@ dtmc
 
 const double git_chance_turn_off_server = 1/27;
 const double continuous_chance_turn_off_server = 1/19;
+const double build_chance_turn_off_server = 1/33;
+
+const double sintatic_error_on_code = 1/7;
 
 // modulo de calculo de internet. Eh utilizado pra calcular se os servidor do git e de build estao funcionais
 module hasInternet
@@ -47,7 +50,7 @@ module updateCodeAndCommit
 	// Atualizar o código e commitar 
 	updateCodeAndCommit: [0..3] init 0;
 		
-	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(que tb checa se ele esta com internet)
+	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(que tambem checa se ele esta com internet)
 	[onAir] updateCodeAndCommit = 0 -> 
 		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 1 : 0);
 	// Codigo atualizado (git pull)	, pronto para commit
@@ -62,31 +65,36 @@ module updateCodeAndCommit
 
 endmodule
 
+// modulo para saber se o servidor de build e deploy esta funcional. Pra esse calculo eh levado em conta a chance do computador dar algum problema e desligar,
+// e a chance dele possuir internet(no caso, seria uma conexao com a maquina de desenvolvimento, podendo ser ate conexao so da rede local)
+module buildOnAir = gitServerOnAir [gitServerStatus = buidServerStatus, git_chance_turn_off_server = build_chance_turn_off_server ,gitOnAir = buildOnAir] endmodule
 module buildDeploy
 	
 	// ocupado
 	// pronto pra buildar
 	// buildando
 	// buildado 
-	buildStatusServer: [0..5] init 0;
+	buildStatusServer: [0..6] init 0;
 	
-	// jah estah buildando algum sistema (OCUPADO)
-	[commited] buildStatusServer = 0 -> 0.985:(buildStatusServer'=1) + 0.015:(buildStatusServer'=0);
+	[commited] buildStatusServer = 0 -> 
+		1:(buildStatusServer'= (buidServerStatus = 2 ? 1 : 0));
+	// jah estah buildando algum sistema (OCUPADO) e se está no ar e se o servidor de build esta esta no ar 
+	[] buildStatusServer = 1 -> 0.935:(buildStatusServer'=2) + 0.065:(buildStatusServer'=1);
+	// analizando erro sintatico do codigo
+	[] buildStatusServer = 2 -> sintatic_error_on_code:(buildStatusServer'=2) + (1 - sintatic_error_on_code):(buildStatusServer'=3);
 	// pronto pra build 
-	[] buildStatusServer = 1 -> 1:(buildStatusServer'=2);
-	// Chance de erro de buildar(erro sintático) e sucesso
-	[] buildStatusServer = 2 -> 0.925:(buildStatusServer'=2) + 0.075:(buildStatusServer'=3);
+	[] buildStatusServer = 3-> 1:(buildStatusServer'=4);
 	//buildado com sucesso
-	[] buildStatusServer = 3 -> 1:(buildStatusServer'= 4);
+	[] buildStatusServer = 4 -> 1:(buildStatusServer'= 5);
 	// 95 de chance de deployar com sucesso +  5 de chance de faltar espaco pra storage do compilado
-	[] buildStatusServer = 4 -> 0.05:(buildStatusServer'=4)+ 0.95:(buildStatusServer'=5);
+	[] buildStatusServer = 5 -> 0.05:(buildStatusServer'=5)+ 0.95:(buildStatusServer'=6);
 	// deployado com sucesso 
-	[] buildStatusServer = 5 -> 1:(buildStatusServer'=1); 
-
-
-	
+	[] buildStatusServer = 6 -> 1:(buildStatusServer'=1); 
 endmodule 
  
+
+
+
 
 
 
