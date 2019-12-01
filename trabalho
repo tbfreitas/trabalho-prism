@@ -1,5 +1,4 @@
 // Trabalho de dependabilidade de software
-// 
 // Objetivo: trabalho visa modelar um sistema de integração contínua.
 dtmc
 
@@ -90,7 +89,9 @@ module buildDeploy
 	[] buildStatusServer = 5 -> 0.05:(buildStatusServer'=5)+ 0.95:(buildStatusServer'=6);
 	// deployado com sucesso 
 	[] buildStatusServer = 6 -> 1:(buildStatusServer'=1); 
+
 endmodule 
+
  
 
 
