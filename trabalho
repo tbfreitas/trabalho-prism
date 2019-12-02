@@ -6,93 +6,76 @@ const double git_chance_turn_off_server = 1/27;
 const double continuous_chance_turn_off_server = 1/19;
 const double build_chance_turn_off_server = 1/33;
 
-const double sintatic_error_on_code = 1/7;
+const double sintatic_error_on_code = 1/3;
 
-// modulo de calculo de internet. Eh utilizado pra calcular se os servidor do git e de build estao funcionais
 module hasInternet
 		
 	// A maquina possui conexao com a internet
-	hasInternetAccess : [0..1] init 0; 
+	// 1 - erro de conexao
+	// 2 - conexao com sucesso
+	hasInternetAccess : [0..2] init 0; 
 	
-	// internet desligada
-	[] hasInternetAccess = 0 -> 0.01:(hasInternetAccess'=0) + 0.99:(hasInternetAccess'=1);		 
-	// internet ligada
-	[connected] hasInternetAccess = 1 -> 0.99:(hasInternetAccess'=1) + 0.01:(hasInternetAccess'=0) ; 	 
+	[] hasInternetAccess = 0 -> 0.01:(hasInternetAccess'=1) + 0.99:(hasInternetAccess'=2);		
+	[] hasInternetAccess = 1 -> 1:(hasInternetAccess'=1) ;		
+	[connected] hasInternetAccess = 2 -> 1:(hasInternetAccess'=2);
+
 	
 endmodule
 
-// modulo de caluclo de internet do computador de desenvolvimento
 module developerComputerHasInternet = hasInternet [hasInternetAccess = computerHasInternetAccess] endmodule
 
-// modulo para saber se o servidor do git esta funcional. Pra esse calculo eh levado em conta a chance do computador dar algum problema e desligar,
-// e a chance dele possuir internet(no caso, seria uma conexao com a maquina de desenvolvimento, podendo ser ate conexao so da rede local)
 module gitServerOnAir
 	
-	// Servidor do git esta no ar e tem internet
+	// 1 - com problema
+	// 2 - servidor git no ar
 	gitServerStatus: [0..2] init 0;
-		
-	// servidor desligado
-	[connected] gitServerStatus = 0 -> 1:(gitServerStatus'=1); 		
-	// liga e verifica a internet 			 						 
-	[] gitServerStatus = 1 -> 1:(gitServerStatus'= hasInternetAccess != 0 ? 2 : 1);			
-	// ligado com internet e chance de desligar					 
-	[onAir] gitServerStatus = 2 -> git_chance_turn_off_server:(gitServerStatus'=0) + (1 - git_chance_turn_off_server):(gitServerStatus'=0); 	 
-
+						 
+	[connected] gitServerStatus = 0 & (hasInternetAccess = 2) -> git_chance_turn_off_server:(gitServerStatus'=1) + (1 - git_chance_turn_off_server):(gitServerStatus'=2); 
+	[] gitServerStatus = 0 & (hasInternetAccess = 1) -> 1:(gitServerStatus'=1);
+	[] gitServerStatus = 1 -> 1:(gitServerStatus'=1);
+	[onAir] gitServerStatus = 2 -> 1:(gitServerStatus'=2);
+	
 endmodule
 	
-// modulo para saber se o servidor de build e deploy esta funcional. Pra esse calculo eh levado em conta a chance do computador dar algum problema e desligar,
-// e a chance dele possuir internet(no caso, seria uma conexao com a maquina de desenvolvimento, podendo ser ate conexao so da rede local)
 module continousServerOnAir = gitServerOnAir [gitServerStatus = continuousServerStatus, git_chance_turn_off_server = continuous_chance_turn_off_server,gitOnAir = continousOnAir] endmodule
 
 module updateCodeAndCommit
 
-	// Atualizar o código e commitar 
-	updateCodeAndCommit: [0..3] init 0;
+	// 1 - problema no update e commit
+	// 2 - updateCode and commit com sucesso 
+	updateCodeAndCommit: [0..2] init 0;
 		
-	// Se tiver que atualizar , verifica se o computador esta com o internet e se o servidor git está no ar(que tambem checa se ele esta com internet)
-	[onAir] updateCodeAndCommit = 0 -> 
-		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 1 : 0);
-	// Codigo atualizado (git pull)	, pronto para commit
-	[] updateCodeAndCommit = 1 -> 
-		1:(updateCodeAndCommit'= 2);
-	// Commitar as alteracoes no codigo. Se der no commit, tentar commitar novamente
-	[] updateCodeAndCommit = 2 -> 
-		1:(updateCodeAndCommit'= (computerHasInternetAccess = 1 & gitServerStatus = 2) ? 3 : 2);
-	// Codigo comitado com sucesso
-	[commited] updateCodeAndCommit = 3 ->
-		1:(updateCodeAndCommit'=3);
+	[onAir] updateCodeAndCommit = 0 & (computerHasInternetAccess = 2) & (gitServerStatus = 2 ) -> 1:(updateCodeAndCommit'=2);
+	[] updateCodeAndCommit = 0 & (computerHasInternetAccess = 1) | (gitServerStatus = 2 ) ->  1:(updateCodeAndCommit'=2);
+	[] updateCodeAndCommit = 1 -> 1:(updateCodeAndCommit'=1);
+	[commited] updateCodeAndCommit = 2 -> 1:(updateCodeAndCommit'=2);
 
 endmodule
 
-// modulo para saber se o servidor de build e deploy esta funcional. Pra esse calculo eh levado em conta a chance do computador dar algum problema e desligar,
-// e a chance dele possuir internet(no caso, seria uma conexao com a maquina de desenvolvimento, podendo ser ate conexao so da rede local)
 module buildOnAir = gitServerOnAir [gitServerStatus = buidServerStatus, git_chance_turn_off_server = build_chance_turn_off_server ,gitOnAir = buildOnAir] endmodule
 module buildDeploy
 	
-	// ocupado
-	// pronto pra buildar
-	// buildando
-	// buildado 
+	// 0 - buidServerStatus está no ar, entao verifica erro sintatico.
+	// 1 - verifica erro sintatico no codigo
+	// 2 - verifica erro de falta de capacidade.
+	// 3 - buildado com sucesso.
+	// 4 - deployado com sucesso. Estado final
+	// 5 - erro no processo
+
 	buildStatusServer: [0..6] init 0;
 	
-	[commited] buildStatusServer = 0 -> 
-		1:(buildStatusServer'= (buidServerStatus = 2 ? 1 : 0));
-	// jah estah buildando algum sistema (OCUPADO) e se está no ar e se o servidor de build esta esta no ar 
-	[] buildStatusServer = 1 -> 0.935:(buildStatusServer'=2) + 0.065:(buildStatusServer'=1);
-	// analizando erro sintatico do codigo
-	[] buildStatusServer = 2 -> sintatic_error_on_code:(buildStatusServer'=2) + (1 - sintatic_error_on_code):(buildStatusServer'=3);
-	// pronto pra build 
+	[commited] buildStatusServer = 0 & (buidServerStatus = 2) -> sintatic_error_on_code:(buildStatusServer'= 5) + (1 - sintatic_error_on_code):(buildStatusServer'=1);
+	[] buildStatusServer = 0 & (buidServerStatus = 1) -> 1:(buildStatusServer'=5);	
+	[] buildStatusServer = 1 -> 0.935:(buildStatusServer'=2) + 0.065:(buildStatusServer'=5);
+	[] buildStatusServer = 2 -> 0.95:(buildStatusServer'=3) + 0.05:(buildStatusServer'=5);
 	[] buildStatusServer = 3-> 1:(buildStatusServer'=4);
-	//buildado com sucesso
-	[] buildStatusServer = 4 -> 1:(buildStatusServer'= 5);
-	// 95 de chance de deployar com sucesso +  5 de chance de faltar espaco pra storage do compilado
-	[] buildStatusServer = 5 -> 0.05:(buildStatusServer'=5)+ 0.95:(buildStatusServer'=6);
-	// deployado com sucesso 
-	[] buildStatusServer = 6 -> 1:(buildStatusServer'=1); 
+	[terminate] buildStatusServer = 4 -> 1:(buildStatusServer'=4);
+	[] buildStatusServer = 5 -> 1:(buildStatusServer'=5); 
 
 endmodule 
 
- 
+label "terminate" = buildStatusServer = 4; 
+
 
 
 
